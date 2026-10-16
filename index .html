@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今日清单 · Todo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e13;
+    --panel: rgba(255, 255, 255, .055);
+    --panel-deep: rgba(16, 20, 27, .55);
+    --stroke: rgba(255, 255, 255, .09);
+    --stroke-strong: rgba(255, 255, 255, .18);
+    --text: #eef2f6;
+    --text-2: #98a2ae;
+    --text-3: #5f6a76;
+    --accent: #34d399;
+    --accent-strong: #2dd4a7;
+    --accent-soft: rgba(52, 211, 153, .12);
+    --danger: #fb7185;
+    --amber: #f6b356;
+    --radius: 22px;
+    --ease: cubic-bezier(.16, 1, .3, 1);
+    font-synthesis: none;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    min-height: 100dvh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Outfit", -apple-system, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* ---------- 背景：流动的 mesh 光斑 ---------- */
+  .bg-mesh { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: .5;
+    will-change: transform;
+  }
+  .blob-1 {
+    width: 46vw; height: 46vw;
+    left: -12vw; top: -18vh;
+    background: radial-gradient(circle at 30% 30%, #14532d, rgba(20, 83, 45, 0) 70%);
+    animation: drift-1 26s var(--ease) infinite alternate;
+  }
+  .blob-2 {
+    width: 40vw; height: 40vw;
+    right: -14vw; top: 6vh;
+    background: radial-gradient(circle at 60% 40%, #164e63, rgba(22, 78, 99, 0) 70%);
+    opacity: .45;
+    animation: drift-2 32s var(--ease) infinite alternate;
+  }
+  .blob-3 {
+    width: 38vw; height: 38vw;
+    left: 22vw; bottom: -22vh;
+    background: radial-gradient(circle at 50% 50%, #5c3a12, rgba(92, 58, 18, 0) 70%);
+    opacity: .38;
+    animation: drift-3 38s var(--ease) infinite alternate;
+  }
+  @keyframes drift-1 {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(6vw, 9vh, 0) scale(1.18); }
+  }
+  @keyframes drift-2 {
+    from { transform: translate3d(0, 0, 0) scale(1.1); }
+    to   { transform: translate3d(-7vw, 12vh, 0) scale(.92); }
+  }
+  @keyframes drift-3 {
+    from { transform: translate3d(0, 0, 0) scale(.95); }
+    to   { transform: translate3d(9vw, -8vh, 0) scale(1.15); }
+  }
+
+  /* 噪点纹理 */
+  .grain {
+    position: fixed; inset: -50%;
+    z-index: 60;
+    width: 200%; height: 200%;
+    pointer-events: none;
+    opacity: .05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: grain-shift 1.2s steps(6) infinite;
+  }
+  @keyframes grain-shift {
+    0%   { transform: translate3d(0, 0, 0); }
+    25%  { transform: translate3d(-1.5%, 1%, 0); }
+    50%  { transform: translate3d(1%, -1.5%, 0); }
+    75%  { transform: translate3d(-1%, -1%, 0); }
+    100% { transform: translate3d(0, 0, 0); }
+  }
+
+  /* ---------- 玻璃基座 ---------- */
+  .glass {
+    position: relative;
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .09),
+      inset 0 0 0 .5px rgba(255, 255, 255, .03),
+      0 30px 60px -30px rgba(0, 0, 0, .65);
+  }
+
+  /* 鼠标 spotlight —— 跟随光标的高亮层 */
+  .spot::before {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .45s var(--ease);
+    background:
+      radial-gradient(520px circle at var(--mx, 50%) var(--my, 50%), rgba(52, 211, 153, .09), transparent 42%),
+      radial-gradient(900px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, .045), transparent 55%);
+  }
+  .spot:hover::before { opacity: 1; }
+
+  /* ---------- 布局 ---------- */
+  .layout {
+    position: relative; z-index: 10;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: clamp(40px, 8vw, 88px) 20px 72px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .top {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .kicker {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .kicker::before {
+    content: "";
+    width: 26px; height: 1px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+
+  h1 {
+    margin-top: 18px;
+    font-size: clamp(38px, 6vw, 58px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+    color: var(--text);
+  }
+  h1 .light { color: var(--text-3); font-weight: 500; }
+
+  .lead {
+    margin-top: 16px;
+    max-width: 46ch;
+    color: var(--text-2);
+    font-size: 15px;
+  }
+
+  /* 日期玻璃卡 */
+  .date-card {
+    padding: 22px 24px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    justify-self: start;
+    overflow: hidden;
+  }
+  .date-num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 38px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .date-sub {
+    font-size: 13px;
+    color: var(--text-2);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .date-sub b { color: var(--text); font-weight: 500; }
+
+  .dot-pulse {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, .5);
+    animation: pulse 2.4s var(--ease) infinite;
+    flex: none;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(52, 211, 153, .45); }
+    70%  { box-shadow: 0 0 0 9px rgba(52, 211, 153, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+  }
+
+  /* ---------- 主面板 ---------- */
+  .panel { overflow: hidden; transition: border-color .4s var(--ease); }
+  .panel:hover { border-color: var(--stroke-strong); }
+
+  .panel-inner {
+    position: relative;
+    padding: clamp(20px, 3.4vw, 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* 添加表单 */
+  .add-form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    background: var(--panel-deep);
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+    padding: 8px 8px 8px 18px;
+    align-items: center;
+    transition: border-color .3s var(--ease), box-shadow .3s var(--ease);
+  }
+  .add-form:focus-within {
+    border-color: rgba(52, 211, 153, .4);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, .08);
+  }
+  .add-form input {
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    width: 100%;
+    min-width: 0;
+  }
+  .add-form input::placeholder { color: var(--text-3); }
+  .add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: #06231a;
+    background: linear-gradient(160deg, #3ee6a8, #22b886);
+    padding: 11px 18px;
+    border-radius: 12px;
+    transition: transform .2s var(--ease), filter .2s var(--ease), opacity .2s var(--ease);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 16px -6px rgba(52, 211, 153, .5);
+  }
+  .add-btn:hover { filter: brightness(1.06); }
+  .add-btn:active { transform: translateY(1px) scale(.98); }
+  .add-btn svg { width: 15px; height: 15px; }
+
+  .shake { animation: shake .4s var(--ease); }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    55% { transform: translateX(4px); }
+    80% { transform: translateX(-2px); }
+  }
+
+  /* 工具栏 */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .filters {
+    display: inline-flex;
+    gap: 3px;
+    background: var(--panel-deep);
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    padding: 3px;
+  }
+  .filter-btn {
+    border: 0;
+    background: transparent;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 15px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background .25s var(--ease), color .25s var(--ease);
+  }
+  .filter-btn:hover { color: var(--text); }
+  .filter-btn.active {
+    background: rgba(255, 255, 255, .09);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+  }
+
+  .count-badge {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--text-2);
+    background: var(--panel-deep);
+    border: 1px solid var(--stroke);
+    padding: 7px 13px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .count-badge b { color: var(--accent); font-weight: 500; }
+
+  /* 进度条 */
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .progress-track {
+    flex: 1;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .07);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #34d399, #6ee7b7);
+    box-shadow: 0 0 12px rgba(52, 211, 153, .5);
+    transition: width .6s var(--ease);
+  }
+  .progress-label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--text-2);
+    min-width: 44px;
+    text-align: right;
+  }
+
+  /* ---------- 任务列表 ---------- */
+  .todo-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .todo-item {
+    --mx: 50%; --my: 50%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 15px 18px;
+    border-radius: 16px;
+    border: 1px solid var(--stroke);
+    background: var(--panel-deep);
+    cursor: pointer;
+    transition: border-color .35s var(--ease), background .35s var(--ease), transform .25s var(--ease);
+    overflow: hidden;
+  }
+  .todo-item:hover {
+    border-color: rgba(52, 211, 153, .35);
+    transform: translateY(-1px);
+  }
+  .todo-item:active { transform: scale(.995); }
+
+  /* 优先级指示点（点击循环切换） */
+  .prio {
+    --pc: var(--text-3);
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--pc);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc) 18%, transparent);
+    flex: none;
+    cursor: pointer;
+    transition: background .25s var(--ease), transform .25s var(--ease);
+  }
+  .prio:hover { transform: scale(1.35); }
+  .prio.p-low   { --pc: var(--text-3); }
+  .prio.p-mid   { --pc: var(--amber); }
+  .prio.p-high  { --pc: var(--danger); }
+
+  .check {
+    flex: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, .22);
+    display: grid;
+    place-items: center;
+    transition: border-color .3s var(--ease), background .3s var(--ease), transform .25s var(--ease);
+  }
+  .check svg {
+    width: 12px; height: 12px;
+    stroke: #06231a;
+    stroke-width: 3;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 16;
+    stroke-dashoffset: 16;
+    transition: stroke-dashoffset .35s var(--ease);
+  }
+  .todo-item:hover .check { border-color: rgba(52, 211, 153, .55); }
+  .todo-item.done .check {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .todo-item.done .check svg { stroke-dashoffset: 0; }
+
+  .todo-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    color: var(--text);
+    transition: color .3s var(--ease), opacity .3s var(--ease);
+    word-break: break-word;
+  }
+  .todo-item.done .todo-text {
+    color: var(--text-3);
+    text-decoration: line-through;
+    text-decoration-color: rgba(152, 162, 174, .5);
+    text-decoration-thickness: 1px;
+  }
+
+  .todo-time {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    color: var(--text-3);
+    flex: none;
+    transition: color .3s var(--ease);
+    white-space: nowrap;
+  }
+
+  .del-btn {
+    flex: none;
+    width: 30px; height: 30px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    opacity: 0;
+    transform: translateX(4px);
+    transition: opacity .3s var(--ease), transform .3s var(--ease), color .25s var(--ease), background .25s var(--ease);
+  }
+  .del-btn svg { width: 15px; height: 15px; }
+  .todo-item:hover .del-btn { opacity: 1; transform: translateX(0); }
+  .del-btn:hover { color: var(--danger); background: rgba(251, 113, 133, .1); }
+  @media (hover: none) {
+    .del-btn { opacity: .55; transform: none; }
+  }
+
+  /* 入场动画 */
+  .todo-item { animation: rise .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 60ms); }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---------- 空状态 ---------- */
+  .empty {
+    text-align: center;
+    padding: 44px 20px;
+    border: 1px dashed rgba(255, 255, 255, .12);
+    border-radius: 16px;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-3);
+  }
+  .empty.show { display: flex; animation: rise .5s var(--ease) both; }
+  .empty .ring {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    border: 1.5px dashed rgba(255, 255, 255, .2);
+    display: grid;
+    place-items: center;
+    margin-bottom: 10px;
+    color: var(--text-3);
+    animation: spin 14s linear infinite;
+  }
+  .empty .ring svg { width: 18px; height: 18px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty h3 { font-size: 15px; font-weight: 500; color: var(--text-2); }
+  .empty p { font-size: 13px; }
+
+  /* 面板底部 */
+  .panel-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 4px;
+    flex-wrap: wrap;
+  }
+  .foot-hint {
+    font-size: 12.5px;
+    color: var(--text-3);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .clear-btn {
+    border: 0;
+    background: transparent;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: color .25s var(--ease), background .25s var(--ease);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .clear-btn.show { opacity: 1; pointer-events: auto; }
+  .clear-btn:hover { color: var(--danger); background: rgba(251, 113, 133, .08); }
+
+  /* 响应式 */
+  @media (min-width: 900px) {
+    .top { grid-template-columns: 1.5fr 1fr; }
+    .date-card { justify-self: end; margin-top: 8px; }
+  }
+  @media (max-width: 480px) {
+    .add-form { grid-template-columns: 1fr; padding: 12px; }
+    .add-btn { justify-content: center; }
+  }
+
+  ::selection { background: rgba(52, 211, 153, .3); }
+
+  :focus-visible {
+    outline: 2px solid rgba(52, 211, 153, .55);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="bg-mesh" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <main class="layout">
+
+    <header class="top">
+      <div>
+        <span class="kicker">Daily Focus</span>
+        <h1>今日清单<span class="light">，只做要紧事</span></h1>
+        <p class="lead" id="greeting">把今天要完成的事写下来，一件一件划掉。目标明确，心就不慌。</p>
+      </div>
+
+      <aside class="glass spot date-card" id="dateCard">
+        <span class="dot-pulse" aria-hidden="true"></span>
+        <div>
+          <div class="date-num" id="todayNum">—</div>
+          <div class="date-sub">
+            <b id="todayFull">—</b>
+            <span id="remainingText">…</span>
+          </div>
+        </div>
+      </aside>
+    </header>
+
+    <section class="glass spot panel" id="panel">
+      <div class="panel-inner">
+
+        <form class="add-form" id="addForm">
+          <input type="text" id="newTodo" placeholder="接下来要做什么？" maxlength="80"
+                 aria-label="新任务内容" autocomplete="off">
+          <button class="add-btn" type="submit" aria-label="添加任务">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            添加
+          </button>
+        </form>
+
+        <div class="toolbar">
+          <div class="filters" role="tablist" aria-label="筛选">
+            <button class="filter-btn active" data-filter="all" role="tab">全部</button>
+            <button class="filter-btn" data-filter="active" role="tab">进行中</button>
+            <button class="filter-btn" data-filter="done" role="tab">已完成</button>
+          </div>
+          <span class="count-badge"><b id="activeCount">0</b> 进行中 · <b id="doneCount">0</b> 已完成</span>
+        </div>
+
+        <ul class="todo-list" id="todoList" aria-live="polite"></ul>
+
+        <div class="empty" id="emptyState">
+          <div class="ring" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/></svg>
+          </div>
+          <h3 id="emptyTitle">清单是空的</h3>
+          <p id="emptyDesc">在上方输入任务，回车即可加入今天的清单。</p>
+        </div>
+
+        <div class="progress-row">
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          <span class="progress-label" id="progressLabel">0%</span>
+        </div>
+
+        <footer class="panel-foot">
+          <span class="foot-hint">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
+            点击左侧圆点可切换任务优先级
+          </span>
+          <button class="clear-btn" id="clearBtn" type="button">清除已完成</button>
+        </footer>
+
+      </div>
+    </section>
+
+  </main>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "daily-todo-v1";
+  var PRIO_CYCLE = { "p-low": "p-mid", "p-mid": "p-high", "p-high": "p-low" };
+  var PRIO_RANK = { "p-low": 0, "p-mid": 1, "p-high": 2 };
+
+  var state = load();
+  var filter = "all";
+
+  var els = {
+    form: document.getElementById("addForm"),
+    input: document.getElementById("newTodo"),
+    list: document.getElementById("todoList"),
+    empty: document.getElementById("emptyState"),
+    emptyTitle: document.getElementById("emptyTitle"),
+    emptyDesc: document.getElementById("emptyDesc"),
+    progressFill: document.getElementById("progressFill"),
+    progressLabel: document.getElementById("progressLabel"),
+    activeCount: document.getElementById("activeCount"),
+    doneCount: document.getElementById("doneCount"),
+    clearBtn: document.getElementById("clearBtn"),
+    remainingText: document.getElementById("remainingText")
+  };
+
+  var icons = {
+    check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 1.8h6a2 2 0 0 0 2-1.8L18 7M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>'
+  };
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { /* 忽略损坏数据 */ }
+    return seed();
+  }
+
+  function seed() {
+    var now = Date.now();
+    return [
+      { id: uid(), text: "梳理本周三大目标，写进日程表", done: false, prio: "p-high", at: now - 3600e3 * 5 },
+      { id: uid(), text: "给产品经理回封邮件，确认排期", done: false, prio: "p-mid", at: now - 3600e3 * 3 },
+      { id: uid(), text: "晚上 8 点前完成锻炼打卡", done: false, prio: "p-low", at: now - 3600e3 }
+    ];
+  }
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch (e) { /* 隐私模式下静默失败 */ }
+  }
+
+  /* ---------- 渲染 ---------- */
+  function visible() {
+    var lists = { all: state, active: state.filter(t => !t.done), done: state.filter(t => t.done) };
+    var view = lists[filter] || [];
+    return view.slice().sort(function (a, b) {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      return PRIO_RANK[b.prio] - PRIO_RANK[a.prio];
+    });
+  }
+
+  function fmtTime(ts) {
+    var d = new Date(ts);
+    var hh = String(d.getHours()).padStart(2, "0");
+    var mm = String(d.getMinutes()).padStart(2, "0");
+    var today = new Date();
+    var sameDay = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+    return (sameDay ? "今天 " : d.getMonth() + 1 + "月" + d.getDate() + "日 ") + hh + ":" + mm;
+  }
+
+  function buildItem(t, i) {
+    var li = document.createElement("li");
+    li.className = "todo-item" + (t.done ? " done" : "");
+    li.style.setProperty("--i", String(i));
+    li.dataset.id = t.id;
+
+    var prio = document.createElement("span");
+    prio.className = "prio " + t.prio;
+    prio.title = "优先级：" + prioName(t.prio) + "（点击切换）";
+    prio.setAttribute("role", "button");
+    prio.setAttribute("aria-label", "切换优先级");
+
+    var check = document.createElement("span");
+    check.className = "check";
+    check.innerHTML = icons.check;
+
+    var text = document.createElement("span");
+    text.className = "todo-text";
+    text.textContent = t.text;
+
+    var time = document.createElement("span");
+    time.className = "todo-time";
+    time.textContent = fmtTime(t.at);
+
+    var del = document.createElement("button");
+    del.className = "del-btn";
+    del.type = "button";
+    del.setAttribute("aria-label", "删除任务");
+    del.innerHTML = icons.trash;
+
+    li.append(prio, check, text, time, del);
+    return li;
+  }
+
+  function render() {
+    var items = visible();
+    els.list.innerHTML = "";
+    items.forEach(function (t, i) { els.list.appendChild(buildItem(t, i)); });
+
+    var left = state.filter(t => !t.done).length;
+    var done = state.length - left;
+    els.activeCount.textContent = left;
+    els.doneCount.textContent = done;
+
+    var pct = state.length ? Math.round(done / state.length * 100) : 0;
+    els.progressFill.style.width = pct + "%";
+    els.progressLabel.textContent = pct + "%";
+
+    els.clearBtn.classList.toggle("show", done > 0);
+
+    var empty = items.length === 0;
+    els.empty.classList.toggle("show", empty);
+    if (empty) {
+      if (state.length === 0) {
+        els.emptyTitle.textContent = "清单是空的";
+        els.emptyDesc.textContent = "在上方输入任务，回车即可加入今天的清单。";
+      } else if (filter === "done") {
+        els.emptyTitle.textContent = "还没有完成的任务";
+        els.emptyDesc.textContent = "划掉一件，就少一件。";
+      } else {
+        els.emptyTitle.textContent = "手上的事都做完了";
+        els.emptyDesc.textContent = "把新任务交给明天的你，或者好好休息一下。";
+      }
+    }
+
+    var remain = state.length ? left : 0;
+    els.remainingText.textContent = state.length
+      ? (left === 0 ? "全部完成，收工" : "还剩 " + left + " 件事待办")
+      : "等待第一件事";
+  }
+
+  function prioName(p) {
+    return { "p-low": "低", "p-mid": "中", "p-high": "高" }[p];
+  }
+
+  /* ---------- 操作 ---------- */
+  function addTodo() {
+    var v = els.input.value.trim();
+    if (!v) {
+      els.form.classList.remove("shake");
+      void els.form.offsetWidth;
+      els.form.classList.add("shake");
+      els.input.focus();
+      return;
+    }
+    state.unshift({ id: uid(), text: v, done: false, prio: "p-mid", at: Date.now() });
+    els.input.value = "";
+    els.input.focus();
+    filter = "all";
+    syncFilters();
+    save();
+    render();
+  }
+
+  els.form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    addTodo();
+  });
+
+  els.list.addEventListener("click", function (e) {
+    var li = e.target.closest(".todo-item");
+    if (!li) return;
+    var id = li.dataset.id;
+    var t = state.find(function (x) { return x.id === id; });
+    if (!t) return;
+
+    if (e.target.closest(".del-btn")) {
+      state = state.filter(function (x) { return x.id !== id; });
+    } else if (e.target.closest(".prio")) {
+      t.prio = PRIO_CYCLE[t.prio] || "p-mid";
+    } else {
+      t.done = !t.done;
+    }
+    save();
+    render();
+  });
+
+  els.clearBtn.addEventListener("click", function () {
+    state = state.filter(function (t) { return !t.done; });
+    save();
+    render();
+  });
+
+  /* ---------- 筛选 ---------- */
+  function syncFilters() {
+    document.querySelectorAll(".filter-btn").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.filter === filter);
+    });
+  }
+
+  document.querySelectorAll(".filter-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      filter = btn.dataset.filter;
+      syncFilters();
+      render();
+    });
+  });
+
+  /* ---------- 鼠标 spotlight ---------- */
+  function enableSpot(elm) {
+    var raf = null;
+    elm.addEventListener("mousemove", function (e) {
+      if (raf) return;
+      raf = requestAnimationFrame(function () {
+        raf = null;
+        var r = elm.getBoundingClientRect();
+        elm.style.setProperty("--mx", (e.clientX - r.left) + "px");
+        elm.style.setProperty("--my", (e.clientY - r.top) + "px");
+      });
+    });
+  }
+  document.querySelectorAll(".spot").forEach(enableSpot);
+  els.list.addEventListener("mousemove", function (e) {
+    var item = e.target.closest(".todo-item");
+    if (!item) return;
+    var r = item.getBoundingClientRect();
+    item.style.setProperty("--mx", (e.clientX - r.left) + "px");
+    item.style.setProperty("--my", (e.clientY - r.top) + "px");
+  });
+
+  /* ---------- 日期 ---------- */
+  (function renderDate() {
+    var now = new Date();
+    var weekday = ["日", "一", "二", "三", "四", "五", "六"][now.getDay()];
+    var num = String(now.getDate()).padStart(2, "0");
+    document.getElementById("todayNum").textContent = num;
+    document.getElementById("todayFull").textContent =
+      now.getFullYear() + "年" + (now.getMonth() + 1) + "月" + now.getDate() + "日 · 周" + weekday;
+
+    var h = now.getHours();
+    var g = document.getElementById("greeting");
+    if (h < 6) g.textContent = "夜深了，记下未完成的事，其余交给明天。";
+    else if (h < 12) g.textContent = "上午把最硬的一块啃下来，这一天就稳了。";
+    else if (h < 18) g.textContent = "下午容易走神，把任务切成小块，逐个击破。";
+    else g.textContent = "晚上优先做重要不紧急的事，别让琐碎占满一天。";
+  })();
+
+  render();
+})();
+</script>
+</body>
+</html>
